@@ -31,12 +31,13 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
     end_date_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
 
     while departure_date <= end_date_dt:
+        current_day = departure_date.strftime("%Y-%m-%d")
         payload = {
             "flightList": [
                 {
                     "departureStation": "ARN",
                     "arrivalStation": "ANY",
-                    "departureDate": departure_date.strftime("%Y-%m-%d")
+                    "departureDate": current_day
                 }
             ],
             "priceType": "regular",
@@ -51,13 +52,14 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
             response = requests.post(url, headers=headers, json=payload)
 
             if update:
-                update.message.reply_text(f"📡 WizzAir yanıt kodu: {response.status_code}")
+                update.message.reply_text(f"📡 WizzAir yanıt kodu: {response.status_code} ({current_day})")
                 update.message.reply_text(f"🧾 Yanıt uzunluğu: {len(response.text)} karakter")
 
             if response.status_code == 429:
                 if update:
-                    update.message.reply_text("🚫 Çok fazla istek atıldı. 10 saniye bekleniyor...")
+                    update.message.reply_text(f"🚫 429 hatası: {current_day} günü atlandı.")
                 time.sleep(10)
+                departure_date += datetime.timedelta(days=1)
                 continue
 
             if response.status_code == 200:
@@ -78,7 +80,7 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
             print("🚨 WizzAir hatası:")
             traceback.print_exc()
             if update:
-                update.message.reply_text("⚠️ WizzAir'dan veri alınamadı.")
+                update.message.reply_text(f"⚠️ {current_day} için WizzAir verisi alınamadı.")
 
         time.sleep(6)
         departure_date += datetime.timedelta(days=1)
