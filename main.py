@@ -1,5 +1,7 @@
 from flask import Flask, request
 import os
+import time
+import datetime
 import requests
 
 from telegram import Update, Bot
@@ -13,8 +15,61 @@ bot = Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.")
+    update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.\n\nÖrnek:\n/kontrol 2025-04-20 2025-04-30 750")
 
+# --- WIZZAIR ---
+def get_wizzair_flights(start_date, end_date, max_price):
+    flights = []
+    url = "https://be.wizzair.com/7.10.1/Api/search/search"
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    departure_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+    end_date_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+
+    while departure_date <= end_date_dt:
+        payload = {
+            "flightList": [
+                {
+                    "departureStation": "ARN",
+                    "arrivalStation": "ANY",
+                    "departureDate": departure_date.strftime("%Y-%m-%d")
+                }
+            ],
+            "priceType": "regular",
+            "isFlightChange": False,
+            "adultCount": 1,
+            "childCount": 0,
+            "infantCount": 0,
+            "wdc": True
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code == 200 and response.content:
+                data = response.json()
+                for flight in data.get("outboundFlights", []):
+                    price = flight.get("price", {}).get("amount", 9999)
+                    if price <= max_price:
+                        flights.append({
+                            "destination": flight.get("arrivalStation", "Unknown"),
+                            "airport_code": flight.get("arrivalStation", ""),
+                            "price": price,
+                            "date": flight.get("departureDate", "")[:10],
+                            "time": flight.get("departureDate", "")[11:16],
+                            "airline": "WizzAir"
+                        })
+        except Exception as e:
+            print(f"WizzAir verisi alınamadı: {e}")
+
+        time.sleep(2)
+        departure_date += datetime.timedelta(days=1)
+
+    return flights
+
+# --- KONTROL KOMUTU ---
 def kontrol(update: Update, context: CallbackContext):
     try:
         args = context.args
@@ -28,39 +83,47 @@ def kontrol(update: Update, context: CallbackContext):
         start_date, end_date, max_price = args
         max_price = int(max_price)
 
-        update.message.reply_text("🔎 Gerçek Ryanair verileriyle biletler aranıyor...")
+        update.message.reply_text("🔎 Ryanair ve WizzAir verileri kontrol ediliyor...")
 
-        url = (
-            "https://www.ryanair.com/api/farfnd/3/oneWayFares"
-            f"?departureAirportIataCode=ARN"
-            f"&language=en&market=se-en"
-            f"&outboundDepartureDateFrom={start_date}"
-            f"&outboundDepartureDateTo={end_date}"
-        )
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers)
-        data = response.json()
+        ryanair_flights = []
+        try:
+            url = (
+                "https://www.ryanair.com/api/farfnd/3/oneWayFares"
+                f"?departureAirportIataCode=ARN"
+                f"&language=en&market=se-en"
+                f"&outboundDepartureDateFrom={start_date}"
+                f"&outboundDepartureDateTo={end_date}"
+            )
+            headers = {"User-Agent": "Mozilla/5.0"}
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            for item in data.get("fares", []):
+                fare = item.get("outbound", {})
+                price_info = fare.get("price", {})
+                amount = price_info.get("value", 9999)
+                if amount <= max_price:
+                    ryanair_flights.append({
+                        "destination": fare.get("arrivalAirport", {}).get("name", "Unknown"),
+                        "airport_code": fare.get("arrivalAirport", {}).get("iataCode", ""),
+                        "price": amount,
+                        "date": fare.get("departureDate", "")[:10],
+                        "time": fare.get("departureDate", "")[11:16],
+                        "airline": "Ryanair"
+                    })
+        except Exception as e:
+            print(f"Ryanair hatası: {e}")
 
-        flights = []
-        for item in data.get("fares", []):
-            fare = item.get("outbound", {})
-            price_info = fare.get("price", {})
-            amount = price_info.get("value", 9999)
-            if amount <= max_price:
-                flights.append({
-                    "destination": fare.get("arrivalAirport", {}).get("name", "Unknown"),
-                    "airport_code": fare.get("arrivalAirport", {}).get("iataCode", ""),
-                    "price": amount,
-                    "date": fare.get("departureDate", "")[:10],
-                    "time": fare.get("departureDate", "")[11:16]
-                })
+        wizzair_flights = get_wizzair_flights(start_date, end_date, max_price)
 
-        if not flights:
-            update.message.reply_text("❌ Bu aralıkta uygun fiyatlı Ryanair uçuşu bulunamadı.")
+        all_flights = ryanair_flights + wizzair_flights
+
+        if not all_flights:
+            update.message.reply_text("❌ Bu aralıkta uygun fiyatlı uçuş bulunamadı.")
         else:
-            for deal in flights:
+            for deal in all_flights:
                 msg = (
                     f"✈️ *Ucuz bilet bulundu!*\n"
+                    f"🏢 Havayolu: *{deal['airline']}*\n"
                     f"📍 Varış: *{deal['destination']}* ({deal['airport_code']})\n"
                     f"📅 Tarih: *{deal['date']}*\n"
                     f"🕒 Saat: *{deal['time']}*\n"
@@ -72,10 +135,7 @@ def kontrol(update: Update, context: CallbackContext):
         print(f"Hata: {e}")
         update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
 
-
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CommandHandler("kontrol", kontrol))
-
+# --- WEBHOOK ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
@@ -86,5 +146,10 @@ def webhook():
 def home():
     return "Flight bot is running!"
 
+# --- DISPATCHERS ---
+dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(CommandHandler("kontrol", kontrol))
+
+# --- FLASK SUNUCU ---
 if __name__ == "__main__":
     app.run(port=8080, host="0.0.0.0")
