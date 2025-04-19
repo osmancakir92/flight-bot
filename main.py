@@ -16,7 +16,62 @@ def start(update: Update, context: CallbackContext):
     update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.")
 
 def kontrol(update: Update, context: CallbackContext):
-    update.message.reply_text("🔍 Uygun biletler aranıyor...\n(örnek cevap) ✈️ Stockholm - Budapest 230 SEK")
+    try:
+        args = context.args
+        if len(args) != 3:
+            update.message.reply_text(
+                "Lütfen şu formatı kullan:\n/kontrol YYYY-AA-GG YYYY-AA-GG maksimum_fiyat\n"
+                "Örnek:\n/kontrol 2025-04-20 2025-04-30 750"
+            )
+            return
+
+        start_date, end_date, max_price = args
+        max_price = int(max_price)
+
+        update.message.reply_text("🔎 Gerçek Ryanair verileriyle biletler aranıyor...")
+
+        url = (
+            "https://www.ryanair.com/api/farfnd/3/oneWayFares"
+            f"?departureAirportIataCode=ARN"
+            f"&language=en&market=se-en"
+            f"&outboundDepartureDateFrom={start_date}"
+            f"&outboundDepartureDateTo={end_date}"
+        )
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        data = response.json()
+
+        flights = []
+        for item in data.get("fares", []):
+            fare = item.get("outbound", {})
+            price_info = fare.get("price", {})
+            amount = price_info.get("value", 9999)
+            if amount <= max_price:
+                flights.append({
+                    "destination": fare.get("arrivalAirport", {}).get("name", "Unknown"),
+                    "airport_code": fare.get("arrivalAirport", {}).get("iataCode", ""),
+                    "price": amount,
+                    "date": fare.get("departureDate", "")[:10],
+                    "time": fare.get("departureDate", "")[11:16]
+                })
+
+        if not flights:
+            update.message.reply_text("❌ Bu aralıkta uygun fiyatlı Ryanair uçuşu bulunamadı.")
+        else:
+            for deal in flights:
+                msg = (
+                    f"✈️ *Ucuz bilet bulundu!*\n"
+                    f"📍 Varış: *{deal['destination']}* ({deal['airport_code']})\n"
+                    f"📅 Tarih: *{deal['date']}*\n"
+                    f"🕒 Saat: *{deal['time']}*\n"
+                    f"💸 Fiyat: *{deal['price']} SEK*"
+                )
+                update.message.reply_text(msg, parse_mode='Markdown')
+
+    except Exception as e:
+        print(f"Hata: {e}")
+        update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
+
 
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("kontrol", kontrol))
