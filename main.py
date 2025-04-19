@@ -18,7 +18,7 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 def start(update: Update, context: CallbackContext):
     update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.\n\nÖrnek:\n/kontrol 2025-04-20 2025-04-30 750")
 
-# --- WIZZAIR (429 korumalı) ---
+# --- WIZZAIR (belirli destinasyon listesiyle) ---
 def get_wizzair_flights(start_date, end_date, max_price, update=None):
     flights = []
     url = "https://be.wizzair.com/7.10.1/Api/search/search"
@@ -27,62 +27,64 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
         "User-Agent": "Mozilla/5.0"
     }
 
+    possible_destinations = ["BUD", "GDN", "WAW", "KTW", "SKG", "VIE"]
     departure_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
     end_date_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
 
     while departure_date <= end_date_dt:
         current_day = departure_date.strftime("%Y-%m-%d")
-        payload = {
-            "flightList": [
-                {
-                    "departureStation": "ARN",
-                    "arrivalStation": "ANY",
-                    "departureDate": current_day
-                }
-            ],
-            "priceType": "regular",
-            "isFlightChange": False,
-            "adultCount": 1,
-            "childCount": 0,
-            "infantCount": 0,
-            "wdc": True
-        }
 
-        try:
-            response = requests.post(url, headers=headers, json=payload)
+        for dest in possible_destinations:
+            payload = {
+                "flightList": [
+                    {
+                        "departureStation": "ARN",
+                        "arrivalStation": dest,
+                        "departureDate": current_day
+                    }
+                ],
+                "priceType": "regular",
+                "isFlightChange": False,
+                "adultCount": 1,
+                "childCount": 0,
+                "infantCount": 0,
+                "wdc": False  # tüm kullanıcılar için
+            }
 
-            if update:
-                update.message.reply_text(f"📡 WizzAir yanıt kodu: {response.status_code} ({current_day})")
-                update.message.reply_text(f"🧾 Yanıt uzunluğu: {len(response.text)} karakter")
+            try:
+                response = requests.post(url, headers=headers, json=payload)
 
-            if response.status_code == 429:
                 if update:
-                    update.message.reply_text(f"🚫 429 hatası: {current_day} günü atlandı.")
-                time.sleep(10)
-                departure_date += datetime.timedelta(days=1)
-                continue
+                    update.message.reply_text(f"📡 WizzAir {current_day} - {dest}: {response.status_code}")
 
-            if response.status_code == 200:
-                data = response.json()
-                for flight in data.get("outboundFlights", []):
-                    price = flight.get("price", {}).get("amount", 9999)
-                    if price <= max_price:
-                        flights.append({
-                            "destination": flight.get("arrivalStation", "Unknown"),
-                            "airport_code": flight.get("arrivalStation", ""),
-                            "price": price,
-                            "date": flight.get("departureDate", "")[:10],
-                            "time": flight.get("departureDate", "")[11:16],
-                            "airline": "WizzAir"
-                        })
+                if response.status_code == 429:
+                    if update:
+                        update.message.reply_text(f"🚫 429 hatası: {current_day} {dest} atlandı.")
+                    time.sleep(10)
+                    continue
 
-        except Exception as e:
-            print("🚨 WizzAir hatası:")
-            traceback.print_exc()
-            if update:
-                update.message.reply_text(f"⚠️ {current_day} için WizzAir verisi alınamadı.")
+                if response.status_code == 200:
+                    data = response.json()
+                    for flight in data.get("outboundFlights", []):
+                        price = flight.get("price", {}).get("amount", 9999)
+                        if price <= max_price:
+                            flights.append({
+                                "destination": dest,
+                                "airport_code": dest,
+                                "price": price,
+                                "date": flight.get("departureDate", "")[:10],
+                                "time": flight.get("departureDate", "")[11:16],
+                                "airline": "WizzAir"
+                            })
 
-        time.sleep(6)
+            except Exception as e:
+                print("🚨 WizzAir hatası:")
+                traceback.print_exc()
+                if update:
+                    update.message.reply_text(f"⚠️ {current_day} {dest} için WizzAir hatası.")
+
+            time.sleep(4)
+
         departure_date += datetime.timedelta(days=1)
 
     return flights
