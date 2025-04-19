@@ -123,6 +123,7 @@ def kontrol(update: Update, context: CallbackContext):
             print("🚨 Ryanair verisi alınamadı:")
             traceback.print_exc()
 
+        print("➡️ get_wizzair_flights fonksiyonu çağrılıyor...")
         wizzair_flights = get_wizzair_flights(start_date, end_date, max_price)
 
         all_flights = ryanair_flights + wizzair_flights
