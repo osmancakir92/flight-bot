@@ -1,3 +1,4 @@
+# ... diğer importlar aynı kalıyor ...
 from flask import Flask, request
 import os
 import time
@@ -19,7 +20,7 @@ def start(update: Update, context: CallbackContext):
     update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.\n\nÖrnek:\n/kontrol 2025-04-20 2025-04-30 750")
 
 # --- WIZZAIR ---
-def get_wizzair_flights(start_date, end_date, max_price):
+def get_wizzair_flights(start_date, end_date, max_price, update=None):
     flights = []
     url = "https://be.wizzair.com/7.10.1/Api/search/search"
     headers = {
@@ -49,9 +50,11 @@ def get_wizzair_flights(start_date, end_date, max_price):
 
         try:
             response = requests.post(url, headers=headers, json=payload)
-            if response.status_code == 429:
-                print(f"🚫 WizzAir 429 hatası: {departure_date.strftime('%Y-%m-%d')}")
-            elif response.status_code == 200:
+            if update:
+                update.message.reply_text(f"📡 WizzAir yanıt kodu: {response.status_code}")
+                update.message.reply_text(f"🧾 Yanıt uzunluğu: {len(response.text)} karakter")
+
+            if response.status_code == 200:
                 data = response.json()
                 for flight in data.get("outboundFlights", []):
                     price = flight.get("price", {}).get("amount", 9999)
@@ -117,12 +120,11 @@ def kontrol(update: Update, context: CallbackContext):
                     })
         except Exception as e:
             update.message.reply_text("🚨 Ryanair verisi alınamadı.")
-            print("Ryanair hatası:")
             traceback.print_exc()
 
         # --- WizzAir ---
         update.message.reply_text("🧪 WizzAir fonksiyonu çağrılıyor...")
-        wizzair_flights = get_wizzair_flights(start_date, end_date, max_price)
+        wizzair_flights = get_wizzair_flights(start_date, end_date, max_price, update=update)
         update.message.reply_text(f"🔍 WizzAir uçuş sayısı: {len(wizzair_flights)}")
 
         all_flights = ryanair_flights + wizzair_flights
@@ -157,10 +159,8 @@ def webhook():
 def home():
     return "Flight bot is running!"
 
-# --- DISPATCHERS ---
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("kontrol", kontrol))
 
-# --- FLASK SUNUCU ---
 if __name__ == "__main__":
     app.run(port=8080, host="0.0.0.0")
