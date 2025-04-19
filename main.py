@@ -50,8 +50,10 @@ def get_wizzair_flights(start_date, end_date, max_price):
 
         try:
             response = requests.post(url, headers=headers, json=payload)
-            print(f"📥 WizzAir API yanıt kodu: {response.status_code}")
-            if response.status_code == 200 and response.content:
+            if response.status_code == 429:
+                print(f"🚫 WizzAir API 429 döndürdü: Çok fazla istek atıldı. Tarih: {departure_date.strftime('%Y-%m-%d')}")
+            elif response.status_code == 200:
+                print(f"✅ WizzAir API başarılı cevap verdi ({departure_date.strftime('%Y-%m-%d')})")
                 data = response.json()
                 for flight in data.get("outboundFlights", []):
                     price = flight.get("price", {}).get("amount", 9999)
@@ -64,6 +66,8 @@ def get_wizzair_flights(start_date, end_date, max_price):
                             "time": flight.get("departureDate", "")[11:16],
                             "airline": "WizzAir"
                         })
+            else:
+                print(f"⚠️ WizzAir API yanıt kodu: {response.status_code}")
         except Exception as e:
             print("🚨 WizzAir verisi alınamadı:")
             traceback.print_exc()
@@ -71,7 +75,7 @@ def get_wizzair_flights(start_date, end_date, max_price):
         time.sleep(2)
         departure_date += datetime.timedelta(days=1)
 
-    print(f"🔍 Bulunan WizzAir uçuş sayısı: {len(flights)}")
+    print(f"🔍 Toplam WizzAir uçuşu bulundu: {len(flights)}")
     return flights
 
 # --- KONTROL KOMUTU ---
@@ -160,4 +164,3 @@ dispatcher.add_handler(CommandHandler("kontrol", kontrol))
 # --- FLASK SUNUCU ---
 if __name__ == "__main__":
     app.run(port=8080, host="0.0.0.0")
-
