@@ -20,7 +20,6 @@ def start(update: Update, context: CallbackContext):
 
 # --- WIZZAIR ---
 def get_wizzair_flights(start_date, end_date, max_price):
-    print(f"📡 WizzAir uçuşları aranıyor: {start_date} → {end_date}")
     flights = []
     url = "https://be.wizzair.com/7.10.1/Api/search/search"
     headers = {
@@ -51,9 +50,8 @@ def get_wizzair_flights(start_date, end_date, max_price):
         try:
             response = requests.post(url, headers=headers, json=payload)
             if response.status_code == 429:
-                print(f"🚫 WizzAir API 429 döndürdü: Çok fazla istek atıldı. Tarih: {departure_date.strftime('%Y-%m-%d')}")
+                print(f"🚫 WizzAir 429 hatası: {departure_date.strftime('%Y-%m-%d')}")
             elif response.status_code == 200:
-                print(f"✅ WizzAir API başarılı cevap verdi ({departure_date.strftime('%Y-%m-%d')})")
                 data = response.json()
                 for flight in data.get("outboundFlights", []):
                     price = flight.get("price", {}).get("amount", 9999)
@@ -66,16 +64,13 @@ def get_wizzair_flights(start_date, end_date, max_price):
                             "time": flight.get("departureDate", "")[11:16],
                             "airline": "WizzAir"
                         })
-            else:
-                print(f"⚠️ WizzAir API yanıt kodu: {response.status_code}")
         except Exception as e:
-            print("🚨 WizzAir verisi alınamadı:")
+            print("🚨 WizzAir hatası:")
             traceback.print_exc()
 
         time.sleep(2)
         departure_date += datetime.timedelta(days=1)
 
-    print(f"🔍 Toplam WizzAir uçuşu bulundu: {len(flights)}")
     return flights
 
 # --- KONTROL KOMUTU ---
@@ -94,6 +89,7 @@ def kontrol(update: Update, context: CallbackContext):
 
         update.message.reply_text("🔎 Ryanair ve WizzAir verileri kontrol ediliyor...")
 
+        # --- Ryanair ---
         ryanair_flights = []
         try:
             url = (
@@ -120,11 +116,14 @@ def kontrol(update: Update, context: CallbackContext):
                         "airline": "Ryanair"
                     })
         except Exception as e:
-            print("🚨 Ryanair verisi alınamadı:")
+            update.message.reply_text("🚨 Ryanair verisi alınamadı.")
+            print("Ryanair hatası:")
             traceback.print_exc()
 
-        print("➡️ get_wizzair_flights fonksiyonu çağrılıyor...")
+        # --- WizzAir ---
+        update.message.reply_text("🧪 WizzAir fonksiyonu çağrılıyor...")
         wizzair_flights = get_wizzair_flights(start_date, end_date, max_price)
+        update.message.reply_text(f"🔍 WizzAir uçuş sayısı: {len(wizzair_flights)}")
 
         all_flights = ryanair_flights + wizzair_flights
 
