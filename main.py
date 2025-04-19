@@ -3,6 +3,7 @@ import os
 import time
 import datetime
 import requests
+import traceback
 
 from telegram import Update, Bot
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
@@ -19,6 +20,7 @@ def start(update: Update, context: CallbackContext):
 
 # --- WIZZAIR ---
 def get_wizzair_flights(start_date, end_date, max_price):
+    print(f"📡 WizzAir uçuşları aranıyor: {start_date} → {end_date}")
     flights = []
     url = "https://be.wizzair.com/7.10.1/Api/search/search"
     headers = {
@@ -48,6 +50,7 @@ def get_wizzair_flights(start_date, end_date, max_price):
 
         try:
             response = requests.post(url, headers=headers, json=payload)
+            print(f"📥 WizzAir API yanıt kodu: {response.status_code}")
             if response.status_code == 200 and response.content:
                 data = response.json()
                 for flight in data.get("outboundFlights", []):
@@ -62,11 +65,13 @@ def get_wizzair_flights(start_date, end_date, max_price):
                             "airline": "WizzAir"
                         })
         except Exception as e:
-            print(f"WizzAir verisi alınamadı: {e}")
+            print("🚨 WizzAir verisi alınamadı:")
+            traceback.print_exc()
 
         time.sleep(2)
         departure_date += datetime.timedelta(days=1)
 
+    print(f"🔍 Bulunan WizzAir uçuş sayısı: {len(flights)}")
     return flights
 
 # --- KONTROL KOMUTU ---
@@ -111,7 +116,8 @@ def kontrol(update: Update, context: CallbackContext):
                         "airline": "Ryanair"
                     })
         except Exception as e:
-            print(f"Ryanair hatası: {e}")
+            print("🚨 Ryanair verisi alınamadı:")
+            traceback.print_exc()
 
         wizzair_flights = get_wizzair_flights(start_date, end_date, max_price)
 
@@ -132,7 +138,8 @@ def kontrol(update: Update, context: CallbackContext):
                 update.message.reply_text(msg, parse_mode='Markdown')
 
     except Exception as e:
-        print(f"Hata: {e}")
+        print("🚨 Genel hata:")
+        traceback.print_exc()
         update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
 
 # --- WEBHOOK ---
@@ -153,3 +160,4 @@ dispatcher.add_handler(CommandHandler("kontrol", kontrol))
 # --- FLASK SUNUCU ---
 if __name__ == "__main__":
     app.run(port=8080, host="0.0.0.0")
+
