@@ -1,4 +1,3 @@
-# ... diğer importlar aynı kalıyor ...
 from flask import Flask, request
 import os
 import time
@@ -19,7 +18,7 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 def start(update: Update, context: CallbackContext):
     update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.\n\nÖrnek:\n/kontrol 2025-04-20 2025-04-30 750")
 
-# --- WIZZAIR ---
+# --- WIZZAIR (429 korumalı) ---
 def get_wizzair_flights(start_date, end_date, max_price, update=None):
     flights = []
     url = "https://be.wizzair.com/7.10.1/Api/search/search"
@@ -50,9 +49,16 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
 
         try:
             response = requests.post(url, headers=headers, json=payload)
+
             if update:
                 update.message.reply_text(f"📡 WizzAir yanıt kodu: {response.status_code}")
                 update.message.reply_text(f"🧾 Yanıt uzunluğu: {len(response.text)} karakter")
+
+            if response.status_code == 429:
+                if update:
+                    update.message.reply_text("🚫 Çok fazla istek atıldı. 10 saniye bekleniyor...")
+                time.sleep(10)
+                continue
 
             if response.status_code == 200:
                 data = response.json()
@@ -67,11 +73,14 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
                             "time": flight.get("departureDate", "")[11:16],
                             "airline": "WizzAir"
                         })
+
         except Exception as e:
             print("🚨 WizzAir hatası:")
             traceback.print_exc()
+            if update:
+                update.message.reply_text("⚠️ WizzAir'dan veri alınamadı.")
 
-        time.sleep(2)
+        time.sleep(6)
         departure_date += datetime.timedelta(days=1)
 
     return flights
@@ -144,9 +153,8 @@ def kontrol(update: Update, context: CallbackContext):
                 update.message.reply_text(msg, parse_mode='Markdown')
 
     except Exception as e:
-        print("🚨 Genel hata:")
-        traceback.print_exc()
         update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
+        traceback.print_exc()
 
 # --- WEBHOOK ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
