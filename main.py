@@ -134,7 +134,7 @@ def tur(update: Update, context: CallbackContext):
             kalkis_saat = g.get("departureDate", "")[11:16]
 
             gidis_date_obj = datetime.datetime.strptime(gidis_tarih, "%Y-%m-%d")
-            donus_baslangic = gidis_date_obj + datetime.timedelta(days=2)
+            donus_baslangic = gidis_date_obj + datetime.timedelta(days=1)
 
             donus_url = (
                 f"https://www.ryanair.com/api/farfnd/3/oneWayFares"
