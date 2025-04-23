@@ -59,7 +59,7 @@ def gidis(update: Update, context: CallbackContext):
                     ryanair_flights.append({
                         "destination": airport.get("name", "Unknown"),
                         "airport_code": airport.get("iataCode", ""),
-                        "city": airport.get("city", ""),
+                        "city": airport.get("city", {}).get("name", ""),
                         "country": airport.get("countryCode", ""),
                         "price": amount,
                         "date": fare.get("departureDate", "")[:10],
@@ -135,7 +135,7 @@ def tur(update: Update, context: CallbackContext):
 
             gidis_tarih = g.get("departureDate", "")[:10]
             varis_adi = airport.get("name", "Unknown")
-            varis_sehir = airport.get("city", "")
+            varis_sehir = airport.get("city", {}).get("name", "")
             varis_ulke = airport.get("countryCode", "")
             kalkis_saat = g.get("departureDate", "")[11:16]
 
