@@ -16,6 +16,8 @@ bot = Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 
 def start(update: Update, context: CallbackContext):
+    if update.message.chat.id != int(CHAT_ID):
+        return
     update.message.reply_text("Merhaba! Uygun biletleri kontrol etmek için /kontrol yaz.\n\nÖrnek:\n/kontrol 2025-04-20 2025-04-30 750")
 
 # --- WIZZAIR (belirli destinasyon listesiyle) ---
@@ -48,17 +50,17 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
                 "adultCount": 1,
                 "childCount": 0,
                 "infantCount": 0,
-                "wdc": False  # tüm kullanıcılar için
+                "wdc": False
             }
 
             try:
                 response = requests.post(url, headers=headers, json=payload)
 
-                if update:
+                if update and update.message.chat.id == int(CHAT_ID):
                     update.message.reply_text(f"📡 WizzAir {current_day} - {dest}: {response.status_code}")
 
                 if response.status_code == 429:
-                    if update:
+                    if update and update.message.chat.id == int(CHAT_ID):
                         update.message.reply_text(f"🚫 429 hatası: {current_day} {dest} atlandı.")
                     time.sleep(10)
                     continue
@@ -80,7 +82,7 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
             except Exception as e:
                 print("🚨 WizzAir hatası:")
                 traceback.print_exc()
-                if update:
+                if update and update.message.chat.id == int(CHAT_ID):
                     update.message.reply_text(f"⚠️ {current_day} {dest} için WizzAir hatası.")
 
             time.sleep(4)
@@ -91,6 +93,8 @@ def get_wizzair_flights(start_date, end_date, max_price, update=None):
 
 # --- KONTROL KOMUTU ---
 def kontrol(update: Update, context: CallbackContext):
+    if update.message.chat.id != int(CHAT_ID):
+        return
     try:
         args = context.args
         if len(args) != 3:
@@ -135,7 +139,6 @@ def kontrol(update: Update, context: CallbackContext):
             update.message.reply_text("🚨 Ryanair verisi alınamadı.")
             traceback.print_exc()
 
-        # --- WizzAir ---
         update.message.reply_text("🧪 WizzAir fonksiyonu çağrılıyor...")
         wizzair_flights = get_wizzair_flights(start_date, end_date, max_price, update=update)
         update.message.reply_text(f"🔍 WizzAir uçuş sayısı: {len(wizzair_flights)}")
@@ -160,10 +163,11 @@ def kontrol(update: Update, context: CallbackContext):
         update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
         traceback.print_exc()
 
-# --- WEBHOOK ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
+    if update.message and update.message.chat.id != int(CHAT_ID):
+        return "Unauthorized", 200
     dispatcher.process_update(update)
     return "OK"
 
