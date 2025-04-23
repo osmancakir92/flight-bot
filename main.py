@@ -10,6 +10,7 @@ from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 
 BOT_TOKEN = '8026104755:AAHQ31YSCJjGHP6mVA1vaAg7zmgHC7gvaNo'
 CHAT_ID = '5455197940'
+WEBHOOK_SECRET = 'abc123xyz'
 
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
@@ -165,9 +166,14 @@ def kontrol(update: Update, context: CallbackContext):
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
+    secret = request.args.get("secret", "")
+    if secret != WEBHOOK_SECRET:
+        return "Unauthorized secret", 403
+
     update = Update.de_json(request.get_json(force=True), bot)
     if not update.message or update.message.chat.id != int(CHAT_ID):
         return "Unauthorized or ignored", 200
+
     dispatcher.process_update(update)
     return "OK"
 
