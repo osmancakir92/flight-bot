@@ -166,8 +166,8 @@ def kontrol(update: Update, context: CallbackContext):
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
-    if update.message and update.message.chat.id != int(CHAT_ID):
-        return "Unauthorized", 200
+    if not update.message or update.message.chat.id != int(CHAT_ID):
+        return "Unauthorized or ignored", 200
     dispatcher.process_update(update)
     return "OK"
 
