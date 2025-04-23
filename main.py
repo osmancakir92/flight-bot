@@ -18,7 +18,7 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 def start(update: Update, context: CallbackContext):
     if update.message.chat.id != int(CHAT_ID):
         return
-    update.message.reply_text("Merhaba!\n\nGidiş uçuşları için: /gidis YYYY-AA-GG YYYY-AA-GG fiyat\nGeliş uçuşları için: /gelis YYYY-AA-GG YYYY-AA-GG fiyat")
+    update.message.reply_text("Merhaba!\n\nGidiş uçuşları için: /gidis YYYY-AA-GG YYYY-AA-GG fiyat\nGeliş uçuşları için: /gelis YYYY-AA-GG YYYY-AA-GG fiyat\nGidiş-Dönüş için: /tur YYYY-AA-GG YYYY-AA-GG fiyat")
 
 # --- GIDIŞ KONTROL KOMUTU ---
 def gidis(update: Update, context: CallbackContext):
@@ -85,69 +85,102 @@ def gidis(update: Update, context: CallbackContext):
         update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
         traceback.print_exc()
 
-# --- GELIŞ KONTROL KOMUTU ---
-def gelis(update: Update, context: CallbackContext):
+# --- TUR KOMUTU (GIDIŞ-DÖNÜŞ) ---
+def tur(update: Update, context: CallbackContext):
     if update.message.chat.id != int(CHAT_ID):
         return
+
     try:
         args = context.args
         if len(args) != 3:
             update.message.reply_text(
-                "Lütfen şu formatı kullan:\n/gelis YYYY-AA-GG YYYY-AA-GG maksimum_fiyat\n"
-                "Örnek:\n/gelis 2025-04-20 2025-04-30 750"
+                "Lütfen şu formatı kullan:\n/tur YYYY-AA-GG YYYY-AA-GG maksimum_fiyat\n"
+                "Örnek:\n/tur 2025-04-25 2025-05-05 800"
             )
             return
 
         start_date, end_date, max_price = args
         max_price = int(max_price)
 
-        update.message.reply_text("🔎 Stockholm varışlı Ryanair geliş verileri kontrol ediliyor...")
+        update.message.reply_text("🔁 Gidiş-Dönüş uçuşlar aranıyor...")
 
-        ryanair_flights = []
-        try:
-            url = (
-                "https://www.ryanair.com/api/farfnd/3/oneWayFares"
-                f"?arrivalAirportIataCode=ARN"
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+        gidis_url = (
+            f"https://www.ryanair.com/api/farfnd/3/oneWayFares"
+            f"?departureAirportIataCode=ARN"
+            f"&language=en&market=se-en"
+            f"&outboundDepartureDateFrom={start_date}"
+            f"&outboundDepartureDateTo={end_date}"
+        )
+        gidis_response = requests.get(gidis_url, headers=headers)
+        gidis_data = gidis_response.json()
+
+        tur_sonuclar = []
+
+        for item in gidis_data.get("fares", []):
+            g = item.get("outbound", {})
+            gidis_fiyat = g.get("price", {}).get("value", 9999)
+            if gidis_fiyat > max_price:
+                continue
+            gidis_tarih = g.get("departureDate", "")[:10]
+            varis_havalimani = g.get("arrivalAirport", {}).get("iataCode", "")
+            varis_adi = g.get("arrivalAirport", {}).get("name", "Unknown")
+            kalkis_saat = g.get("departureDate", "")[11:16]
+
+            # --- dönüş tarihi aralığı belirle ---
+            gidis_date_obj = datetime.datetime.strptime(gidis_tarih, "%Y-%m-%d")
+            donus_baslangic = gidis_date_obj + datetime.timedelta(days=2)
+            donus_bit = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+
+            donus_url = (
+                f"https://www.ryanair.com/api/farfnd/3/oneWayFares"
+                f"?departureAirportIataCode={varis_havalimani}"
+                f"&arrivalAirportIataCode=ARN"
                 f"&language=en&market=se-en"
-                f"&outboundDepartureDateFrom={start_date}"
+                f"&outboundDepartureDateFrom={donus_baslangic.date()}"
                 f"&outboundDepartureDateTo={end_date}"
             )
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers)
-            data = response.json()
-            for item in data.get("fares", []):
-                fare = item.get("outbound", {})
-                price_info = fare.get("price", {})
-                amount = price_info.get("value", 9999)
-                if amount <= max_price:
-                    ryanair_flights.append({
-                        "destination": fare.get("departureAirport", {}).get("name", "Unknown"),
-                        "airport_code": fare.get("departureAirport", {}).get("iataCode", ""),
-                        "price": amount,
-                        "date": fare.get("departureDate", "")[:10],
-                        "time": fare.get("departureDate", "")[11:16],
-                        "airline": "Ryanair"
-                    })
-        except Exception as e:
-            update.message.reply_text("🚨 Ryanair verisi alınamadı.")
-            traceback.print_exc()
+            try:
+                donus_response = requests.get(donus_url, headers=headers)
+                donus_data = donus_response.json()
+                for d in donus_data.get("fares", []):
+                    d_out = d.get("outbound", {})
+                    donus_fiyat = d_out.get("price", {}).get("value", 9999)
+                    if donus_fiyat > max_price:
+                        continue
+                    donus_tarih = d_out.get("departureDate", "")[:10]
+                    donus_saat = d_out.get("departureDate", "")[11:16]
 
-        if not ryanair_flights:
-            update.message.reply_text("❌ Bu aralıkta Stockholm varışlı uygun geliş uçuşu bulunamadı.")
+                    tur_sonuclar.append({
+                        "lokasyon": varis_adi,
+                        "kod": varis_havalimani,
+                        "gidis_tarih": gidis_tarih,
+                        "gidis_saat": kalkis_saat,
+                        "gidis_fiyat": gidis_fiyat,
+                        "donus_tarih": donus_tarih,
+                        "donus_saat": donus_saat,
+                        "donus_fiyat": donus_fiyat,
+                        "toplam": gidis_fiyat + donus_fiyat
+                    })
+            except:
+                continue
+
+        if not tur_sonuclar:
+            update.message.reply_text("❌ Gidiş-Dönüş uygun uçuş bulunamadı.")
         else:
-            for deal in ryanair_flights:
+            for d in tur_sonuclar:
                 msg = (
-                    f"🛬 *Ucuz geliş bileti bulundu!*\n"
-                    f"🏢 Havayolu: *{deal['airline']}*\n"
-                    f"📍 Kalkış: *{deal['destination']}* ({deal['airport_code']})\n"
-                    f"📅 Tarih: *{deal['date']}*\n"
-                    f"🕒 Saat: *{deal['time']}*\n"
-                    f"💸 Fiyat: *{deal['price']} SEK*"
+                    f"🔁 *Gidiş-Dönüş bileti bulundu!*\n"
+                    f"📍 Varış: *{d['lokasyon']}* ({d['kod']})\n"
+                    f"🛫 Gidiş: *{d['gidis_tarih']} {d['gidis_saat']}* – 💸 *{d['gidis_fiyat']} SEK*\n"
+                    f"🛬 Dönüş: *{d['donus_tarih']} {d['donus_saat']}* – 💸 *{d['donus_fiyat']} SEK*\n"
+                    f"💰 Toplam: *{d['toplam']} SEK*"
                 )
                 update.message.reply_text(msg, parse_mode='Markdown')
 
     except Exception as e:
-        update.message.reply_text("⚠️ Bir hata oluştu. Lütfen tekrar deneyin.")
+        update.message.reply_text("⚠️ Bir hata oluştu.")
         traceback.print_exc()
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
@@ -169,7 +202,7 @@ def home():
 
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("gidis", gidis))
-dispatcher.add_handler(CommandHandler("gelis", gelis))
+dispatcher.add_handler(CommandHandler("tur", tur))
 
 if __name__ == "__main__":
     app.run(port=8080, host="0.0.0.0")
