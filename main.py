@@ -18,7 +18,7 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 def start(update: Update, context: CallbackContext):
     if update.message.chat.id != int(CHAT_ID):
         return
-    update.message.reply_text("Merhaba!\n\nGidiş uçuşları için: /gidis YYYY-AA-GG YYYY-AA-GG fiyat\nGeliş uçuşları için: /gelis YYYY-AA-GG YYYY-AA-GG fiyat\nGidiş-Dönüş için: /tur YYYY-AA-GG YYYY-AA-GG fiyat")
+    update.message.reply_text("Merhaba!\n\nGidiş uçuşları için: /gidis YYYY-AA-GG YYYY-AA-GG fiyat\nGeliş uçuşları için: /gelis YYYY-AA-GG YYYY-AA-GG fiyat\nGidiş-Dönüş için: /tur YYYY-AA-GG YYYY-AA-GG fiyat [opsiyonel_havaalani_kodu]")
 
 # --- GIDIŞ KONTROL KOMUTU ---
 def gidis(update: Update, context: CallbackContext):
@@ -92,15 +92,17 @@ def tur(update: Update, context: CallbackContext):
 
     try:
         args = context.args
-        if len(args) != 3:
+        if len(args) not in [3, 4]:
             update.message.reply_text(
-                "Lütfen şu formatı kullan:\n/tur YYYY-AA-GG YYYY-AA-GG maksimum_fiyat\n"
-                "Örnek:\n/tur 2025-04-25 2025-05-05 800"
+                "Lütfen şu formatı kullan:\n/tur YYYY-AA-GG YYYY-AA-GG maksimum_fiyat [opsiyonel_varış_havaalanı_kodu]\n"
+                "Örnek:\n/tur 2025-04-25 2025-05-05 800\n"
+                "veya belli lokasyon için: /tur 2025-04-25 2025-05-05 800 BVA"
             )
             return
 
-        start_date, end_date, max_price = args
+        start_date, end_date, max_price = args[:3]
         max_price = int(max_price)
+        hedef_havaalani = args[3].upper() if len(args) == 4 else None
 
         update.message.reply_text("🔁 Gidiş-Dönüş uçuşlar aranıyor...")
 
@@ -123,15 +125,16 @@ def tur(update: Update, context: CallbackContext):
             gidis_fiyat = g.get("price", {}).get("value", 9999)
             if gidis_fiyat > max_price:
                 continue
-            gidis_tarih = g.get("departureDate", "")[:10]
             varis_havalimani = g.get("arrivalAirport", {}).get("iataCode", "")
+            if hedef_havaalani and varis_havalimani != hedef_havaalani:
+                continue
+
+            gidis_tarih = g.get("departureDate", "")[:10]
             varis_adi = g.get("arrivalAirport", {}).get("name", "Unknown")
             kalkis_saat = g.get("departureDate", "")[11:16]
 
-            # --- dönüş tarihi aralığı belirle ---
             gidis_date_obj = datetime.datetime.strptime(gidis_tarih, "%Y-%m-%d")
             donus_baslangic = gidis_date_obj + datetime.timedelta(days=2)
-            donus_bit = datetime.datetime.strptime(end_date, "%Y-%m-%d")
 
             donus_url = (
                 f"https://www.ryanair.com/api/farfnd/3/oneWayFares"
