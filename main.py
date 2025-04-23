@@ -55,9 +55,12 @@ def gidis(update: Update, context: CallbackContext):
                 price_info = fare.get("price", {})
                 amount = price_info.get("value", 9999)
                 if amount <= max_price:
+                    airport = fare.get("arrivalAirport", {})
                     ryanair_flights.append({
-                        "destination": fare.get("arrivalAirport", {}).get("name", "Unknown"),
-                        "airport_code": fare.get("arrivalAirport", {}).get("iataCode", ""),
+                        "destination": airport.get("name", "Unknown"),
+                        "airport_code": airport.get("iataCode", ""),
+                        "city": airport.get("city", ""),
+                        "country": airport.get("countryCode", ""),
                         "price": amount,
                         "date": fare.get("departureDate", "")[:10],
                         "time": fare.get("departureDate", "")[11:16],
@@ -74,7 +77,7 @@ def gidis(update: Update, context: CallbackContext):
                 msg = (
                     f"✈️ *Ucuz bilet bulundu!*\n"
                     f"🏢 Havayolu: *{deal['airline']}*\n"
-                    f"📍 Varış: *{deal['destination']}* ({deal['airport_code']})\n"
+                    f"📍 Varış: *{deal['destination']} / {deal['city']}, {deal['country']}* ({deal['airport_code']})\n"
                     f"📅 Tarih: *{deal['date']}*\n"
                     f"🕒 Saat: *{deal['time']}*\n"
                     f"💸 Fiyat: *{deal['price']} SEK*"
@@ -125,12 +128,15 @@ def tur(update: Update, context: CallbackContext):
             gidis_fiyat = g.get("price", {}).get("value", 9999)
             if gidis_fiyat > max_price:
                 continue
-            varis_havalimani = g.get("arrivalAirport", {}).get("iataCode", "")
+            airport = g.get("arrivalAirport", {})
+            varis_havalimani = airport.get("iataCode", "")
             if hedef_havaalani and varis_havalimani != hedef_havaalani:
                 continue
 
             gidis_tarih = g.get("departureDate", "")[:10]
-            varis_adi = g.get("arrivalAirport", {}).get("name", "Unknown")
+            varis_adi = airport.get("name", "Unknown")
+            varis_sehir = airport.get("city", "")
+            varis_ulke = airport.get("countryCode", "")
             kalkis_saat = g.get("departureDate", "")[11:16]
 
             gidis_date_obj = datetime.datetime.strptime(gidis_tarih, "%Y-%m-%d")
@@ -158,6 +164,8 @@ def tur(update: Update, context: CallbackContext):
                     tur_sonuclar.append({
                         "lokasyon": varis_adi,
                         "kod": varis_havalimani,
+                        "sehir": varis_sehir,
+                        "ulke": varis_ulke,
                         "gidis_tarih": gidis_tarih,
                         "gidis_saat": kalkis_saat,
                         "gidis_fiyat": gidis_fiyat,
@@ -175,7 +183,7 @@ def tur(update: Update, context: CallbackContext):
             for d in tur_sonuclar:
                 msg = (
                     f"🔁 *Gidiş-Dönüş bileti bulundu!*\n"
-                    f"📍 Varış: *{d['lokasyon']}* ({d['kod']})\n"
+                    f"📍 Varış: *{d['lokasyon']} / {d['sehir']}, {d['ulke']}* ({d['kod']})\n"
                     f"🛫 Gidiş: *{d['gidis_tarih']} {d['gidis_saat']}* – 💸 *{d['gidis_fiyat']} SEK*\n"
                     f"🛬 Dönüş: *{d['donus_tarih']} {d['donus_saat']}* – 💸 *{d['donus_fiyat']} SEK*\n"
                     f"💰 Toplam: *{d['toplam']} SEK*"
