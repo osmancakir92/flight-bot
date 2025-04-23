@@ -77,7 +77,7 @@ def gidis(update: Update, context: CallbackContext):
                 msg = (
                     f"✈️ *Ucuz bilet bulundu!*\n"
                     f"🏢 Havayolu: *{deal['airline']}*\n"
-                    f"📍 Varış: *{deal['destination']} / {deal['city']}, {deal['country']}* ({deal['airport_code']})\n"
+                    f"📍 Varış: *{deal['destination']} / {deal['city']}, {deal['country'].upper()}* ({deal['airport_code']})\n"
                     f"📅 Tarih: *{deal['date']}*\n"
                     f"🕒 Saat: *{deal['time']}*\n"
                     f"💸 Fiyat: *{deal['price']} SEK*"
@@ -183,7 +183,7 @@ def tur(update: Update, context: CallbackContext):
             for d in tur_sonuclar:
                 msg = (
                     f"🔁 *Gidiş-Dönüş bileti bulundu!*\n"
-                    f"📍 Varış: *{d['lokasyon']} / {d['sehir']}, {d['ulke']}* ({d['kod']})\n"
+                    f"📍 Varış: *{d['lokasyon']} / {d['sehir']}, {d['ulke'].upper()}* ({d['kod']})\n"
                     f"🛫 Gidiş: *{d['gidis_tarih']} {d['gidis_saat']}* – 💸 *{d['gidis_fiyat']} SEK*\n"
                     f"🛬 Dönüş: *{d['donus_tarih']} {d['donus_saat']}* – 💸 *{d['donus_fiyat']} SEK*\n"
                     f"💰 Toplam: *{d['toplam']} SEK*"
